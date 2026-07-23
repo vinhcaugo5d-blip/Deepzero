@@ -37,9 +37,9 @@ def get_random_gemini_model():
   chosen_key = random.choice(api_keys)
   genai.configure(api_key=chosen_key)
   generation_config = {"temperature": 0.7, "max_output_tokens": 600}
-  # Sử dụng gemini-3.5-flash để tương thích chuẩn xác với API mới nhất
+  # Sử dụng gemini-2.5-flash chuẩn ổn định cho production
   return genai.GenerativeModel(
-      model_name="gemini-3.5-flash", generation_config=generation_config
+      model_name="gemini-2.5-flash", generation_config=generation_config
   )
 
 
