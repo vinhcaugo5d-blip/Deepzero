@@ -1,4 +1,5 @@
 import streamlit as st
+import os
 from huggingface_hub import InferenceClient
 
 st.set_page_config(page_title="DeepZero AI Assistant", page_icon="🤖", layout="centered")
@@ -6,9 +7,12 @@ st.set_page_config(page_title="DeepZero AI Assistant", page_icon="🤖", layout=
 st.title("🤖 DeepZero AI Assistant (Online 24/7)")
 st.write("Hệ thống trợ lý ảo thông minh tích hợp Self-Healing.")
 
-# Khởi tạo Hugging Face Inference Client với mô hình Qwen
+# Lấy token từ Streamlit Secrets để ai cũng dùng được mà không cần nhập token
+hf_token = st.secrets.get("HF_TOKEN")
+
+# Khởi tạo Hugging Face Inference Client với mô hình Qwen và token bảo mật
 MODEL_ID = "Qwen/Qwen2.5-7B-Instruct"
-client = InferenceClient(model=MODEL_ID)
+client = InferenceClient(model=MODEL_ID, token=hf_token)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
