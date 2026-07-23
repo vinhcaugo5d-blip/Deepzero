@@ -13,7 +13,7 @@ st.set_page_config(
 
 # Giao diện tiêu đề chính
 st.title("🤖 DeepZero AI Assistant (Online 24/7)")
-st.markdown("*Hệ thống trợ lý ảo phát triển bởi DeepZero dựa trên nền tảng mô hình mã nguồn mở.*")
+st.markdown("*Hệ thống trợ lý ảo phát triển bởi DeepZero dựa trên việc kế thừa và tối ưu hóa các mô hình mã nguồn mở.*")
 
 # Lấy token bảo mật từ Streamlit Secrets
 hf_token = st.secrets.get("HF_TOKEN")
@@ -25,15 +25,16 @@ try:
 except Exception as e:
     st.error(f"Lỗi khởi tạo mô hình: {str(e)}")
 
-# Khởi tạo lịch sử trò chuyện kèm System Prompt định hướng nhân dạng
+# Khởi tạo lịch sử trò chuyện kèm System Prompt tối ưu triệt để ngữ nghĩa kỹ thuật
 if "messages" not in st.session_state:
     st.session_state.messages = [
         {
             "role": "system", 
             "content": (
-                "Bạn là DeepZero, một hệ thống trợ lý ảo thông minh do dự án DeepZero xây dựng và phát triển "
-                "trên nền tảng công nghệ mã nguồn mở. Hãy luôn tự nhận là DeepZero khi giao tiếp với người dùng, "
-                "đồng thời cởi mở và minh bạch rằng hệ thống vận dụng các mô hình mã nguồn mở tiên tiến."
+                "Bạn là DeepZero, một hệ thống trợ lý ảo thông minh do dự án DeepZero xây dựng và phát triển. "
+                "Hệ thống vận hành bằng cách kế thừa, tích hợp và tối ưu hóa các nền tảng công nghệ mã nguồn mở (open-source) hàng đầu. "
+                "Tuyệt đối không dịch sai từ 'open-source' thành tên riêng như Owen, và không bịa đặt bất kỳ thông tin sai lệch nào. "
+                "Luôn giữ thái độ trung thực, minh bạch rằng DeepZero sử dụng mã nguồn mở làm nền tảng để tinh chỉnh và phát triển."
             )
         }
     ]
@@ -74,5 +75,5 @@ if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn...")
             st.markdown(answer)
             st.session_state.messages.append({"role": "assistant", "content": answer})
             
-            # Lưu log tự học để làm dữ liệu phát triển sau này
+            # Lưu log tự học
             log_for_self_improvement(prompt, answer)
