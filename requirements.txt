@@ -1,6 +1,7 @@
+streamlit
+google-generativeai
 fastapi
 uvicorn
 requests
-streamlit
 huggingface_hub
 pydantic
