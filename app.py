@@ -24,7 +24,7 @@ if not api_keys and "GEMINI_API_KEY" in st.secrets:
   api_keys = [st.secrets.get("GEMINI_API_KEY")]
 
 
-# Khởi tạo client với thư viện google-genai mới nhất hỗ trợ key AQ.
+# Khởi tạo client với thư viện google-genai mới nhất
 def get_gemini_client():
   if not api_keys:
     raise ValueError(
@@ -76,29 +76,43 @@ if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn...")
     try:
       client = get_gemini_client()
 
-      # Chuyển đổi lịch sử chat sang định dạng chuẩn của SDK mới
+      # Xây dựng nội dung lịch sử chat cho SDK mới
       formatted_contents = []
       for m in st.session_state.messages:
         role = "user" if m["role"] == "user" else "model"
-        formatted_contents.append({"role": role, "parts": [{"text": m["content"]}]})
+        formatted_contents.append(
+            {"role": role, "parts": [{"text": m["content"]}]}
+        )
 
-      # Thêm System Instruction vào đầu ngữ cảnh
       full_contents = [
-          {"role": "user", "parts": [{"text": f"[System Directive]: {system_instruction_content}"}]},
+          {
+              "role": "user",
+              "parts": [{
+                  "text": f"[System Directive]: {system_instruction_content}"
+              }],
+          },
           {"role": "model", "parts": [{"text": "Đã hiểu chỉ thị hệ thống."}]},
       ] + formatted_contents
 
-      response = client.models.generate_content(
+      # Sử dụng streaming để phản hồi nhanh ngay lập tức từng chữ
+      response_stream = client.models.generate_content_stream(
           model="gemini-2.5-flash",
           contents=full_contents,
       )
 
-      answer = response.text.strip()
-      st.markdown(answer)
-      st.session_state.messages.append({"role": "assistant", "content": answer})
+      # Hiển thị trực tiếp dòng chữ chạy ra
+      answer = st.write_stream(
+          chunk.text for chunk in response_stream if chunk.text
+      )
+
+      st.session_state.messages.append(
+          {"role": "assistant", "content": answer}
+      )
       log_for_self_improvement(prompt, answer)
 
     except Exception as e:
       error_msg = f"Đã xảy ra lỗi kết nối hệ thống: {str(e)}"
       st.error(error_msg)
-      st.session_state.messages.append({"role": "assistant", "content": error_msg})
+      st.session_state.messages.append(
+          {"role": "assistant", "content": error_msg}
+      )
