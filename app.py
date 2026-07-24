@@ -24,7 +24,7 @@ if not api_keys and "GEMINI_API_KEY" in st.secrets:
   api_keys = [st.secrets.get("GEMINI_API_KEY")]
 
 
-# Khởi tạo mô hình Gemini với cơ chế xoay vòng key
+# Sử dụng model gemini-3.5-flash chuẩn ổn định nhất hiện tại
 def get_random_gemini_model():
   if not api_keys:
     raise ValueError(
@@ -34,7 +34,7 @@ def get_random_gemini_model():
   genai.configure(api_key=chosen_key)
   generation_config = {"temperature": 0.7, "max_output_tokens": 1500}
   return genai.GenerativeModel(
-      model_name="gemini-2.5-flash", generation_config=generation_config
+      model_name="gemini-3.5-flash", generation_config=generation_config
   )
 
 
@@ -92,14 +92,12 @@ if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn...")
 
       chat_session = active_model.start_chat(history=chat_history)
 
-      # Gửi tin nhắn kèm chỉ thị hệ thống và bật stream trực tiếp
       response = chat_session.send_message(
           f"[System Directive]: {system_instruction_content}\n\nUser request:"
           f" {prompt}",
           stream=True,
       )
 
-      # Hiển thị từng chữ chảy ra thời gian thực
       answer = st.write_stream(
           chunk.text for chunk in response if chunk.text
       )
