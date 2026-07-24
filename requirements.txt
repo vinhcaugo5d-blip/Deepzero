@@ -5,4 +5,4 @@ uvicorn
 requests
 huggingface_hub
 pydantic
-beautifulsoup4
+duckduckgo_search
