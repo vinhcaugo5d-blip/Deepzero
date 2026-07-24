@@ -14,12 +14,12 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Native Smart Search Core)")
+st.title("🤖 DeepZero AI Assistant (Pro Core)")
 st.markdown(
-    "*Trợ lý ảo cấu hình cao cấp - Tự động tra cứu thông minh phong cách ChatGPT.*"
+    "*Trợ lý ảo cấu hình cao - Tự động tra cứu thông minh và xử lý linh hoạt.*"
 )
 
-# Lấy danh sách nhiều token từ Streamlit Secrets
+# Lấy danh sách token từ Streamlit Secrets
 hf_tokens = st.secrets.get("HF_TOKENS", [])
 if not hf_tokens and "HF_TOKEN" in st.secrets:
   hf_tokens = [st.secrets.get("HF_TOKEN")]
@@ -52,15 +52,16 @@ def smart_generate_response(formatted_messages, system_instruction):
   available_hf_tokens = list(hf_tokens)
   random.shuffle(available_hf_tokens)
 
-  # Ưu tiên sử dụng các mô hình siêu lớn (72B / 70B)
-  large_models = [
+  # Danh sách mô hình sắp xếp theo độ ưu tiên từ lớn đến chuẩn
+  models_to_try = [
       "Qwen/Qwen2.5-72B-Instruct",
       "meta-llama/Llama-3.3-70B-Instruct",
       "Qwen/Qwen2.5-7B-Instruct",
+      "meta-llama/Llama-3.1-8B-Instruct",
   ]
 
   for token in available_hf_tokens:
-    for model_id in large_models:
+    for model_id in models_to_try:
       try:
         client = InferenceClient(model=model_id, token=token)
 
@@ -88,7 +89,7 @@ def smart_generate_response(formatted_messages, system_instruction):
           # Thực hiện tra cứu ngầm
           search_data = web_search(search_query)
 
-          # Cung cấp kết quả tra cứu vào ngữ cảnh và yêu cầu model tổng hợp lại câu trả lời cuối cùng
+          # Cung cấp kết quả tra cứu vào ngữ cảnh và yêu cầu model tổng hợp lại câu trả lời
           follow_up_messages = full_messages + [
               {"role": "assistant", "content": initial_reply},
               {
@@ -126,8 +127,8 @@ def smart_generate_response(formatted_messages, system_instruction):
         continue
 
   raise Exception(
-      f"Hệ thống bận hoặc các key đã hết hạn mức. Chi tiết lỗi cuối:"
-      f" {str(last_error)}"
+      f"Hệ thống bận hoặc các key đã hết hạn mức/yêu cầu thanh toán cho model"
+      f" lớn. Chi tiết lỗi cuối: {str(last_error)}"
   )
 
 
@@ -137,17 +138,17 @@ if "messages" not in st.session_state:
 
 system_inch = (
     "Bạn là DeepZero, hệ thống trợ lý ảo thông minh siêu việt do dự án DeepZero"
-    " xây dựng và phát triển. Mốc thời gian hiện tại là năm 2026. **QUY TẮC"
-    " TRA CỨU:** Khi người dùng hỏi về các thông tin thời sự, sự kiện, lịch"
-    " chiếu phim/anime, luật pháp, giá cả hoặc bất kỳ dữ liệu thực tế nào cần"
-    " độ chính xác cao theo thời gian thực mà bạn không chắc chắn hoặc cần cập"
-    " nhật năm 2026, hãy tự động phân tích và đưa ra cú pháp yêu cầu tra cứu"
-    " theo định dạng chính xác: [SEARCH: từ_khóa_cần_tìm] ngay trong câu trả lời"
-    " của bạn. Nếu là câu chào hỏi hoặc kiến thức cơ bản thông thường, hãy trả"
-    " lời trực tiếp ngay lập tức. Tuyệt đối không dịch sai từ 'open-source'"
-    " thành tên riêng như Owen, và không bịa đặt thông tin. Khi trình bày"
-    " công thức toán học, tuyệt đối KHÔNG dùng LaTeX phức tạp hay đóng khung"
-    " bằng ngoặc vuông \\[ \\], hãy viết ký hiệu cơ bản rõ ràng."
+    " xây dựng và phát triển. Mốc thời gian hiện tại là tháng 7 năm 2026. **QUY"
+    " TẮC TRA CỨU:** Khi người dùng hỏi về các thông tin thời sự, sự kiện, lịch"
+    " chiếu phim/anime (ví dụ Mushoku Tensei mùa 3 tập 8), luật pháp, giá cả"
+    " hoặc bất kỳ dữ liệu thực tế nào cần độ chính xác cao, hãy tự động phân"
+    " tích và đưa ra cú pháp yêu cầu tra cứu theo định dạng: [SEARCH:"
+    " từ_khóa_cần_tìm] ngay trong câu trả lời của bạn. Nếu là câu chào hỏi"
+    " hoặc kiến thức cơ bản thông thường, hãy trả lời trực tiếp ngay lập tức."
+    " Tuyệt đối không dịch sai từ 'open-source' thành tên riêng như Owen, và"
+    " không bịa đặt thông tin. Khi trình bày công thức toán học, tuyệt đối"
+    " KHÔNG dùng LaTeX phức tạp hay đóng khung bằng ngoặc vuông \\[ \\], hãy"
+    " viết ký hiệu cơ bản rõ ràng."
 )
 
 for message in st.session_state.messages:
@@ -167,7 +168,7 @@ if prompt := st.chat_input("Nhập câu hỏi của bạn..."):
         role = "user" if m["role"] == "user" else "assistant"
         formatted_messages.append({"role": role, "content": m["content"]})
 
-      with st.spinner("DeepZero 72B đang suy nghĩ và phân tích..."):
+      with st.spinner("DeepZero đang phân tích..."):
         answer = smart_generate_response(formatted_messages, system_inch)
 
       st.markdown(answer)
