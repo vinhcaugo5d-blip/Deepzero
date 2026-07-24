@@ -13,13 +13,13 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Stable Hub Core)")
+st.title("🤖 DeepZero AI Assistant (72B Pro Core)")
 st.markdown(
-    "*Trợ lý ảo tối ưu hóa tốc độ cao - Kết nối chuẩn qua Hugging Face Hub"
-    " Client.*"
+    "*Trợ lý ảo cấu hình cao cấp - Tối ưu hóa mô hình 72B, tự động tra cứu web"
+    " và xoay vòng key.*"
 )
 
-# Lấy token Hugging Face từ Streamlit Secrets
+# Lấy danh sách nhiều token/key từ Streamlit Secrets
 hf_tokens = st.secrets.get("HF_TOKENS", [])
 if not hf_tokens and "HF_TOKEN" in st.secrets:
   hf_tokens = [st.secrets.get("HF_TOKEN")]
@@ -40,15 +40,34 @@ def needs_web_search(query):
       "thời tiết",
       "bóng đá",
       "kết quả",
+      "phần",
+      "mùa",
+      "tập",
+      "anime",
+      "chiếu",
+      "lịch",
+      "luật",
+      "nghị định",
+      "thông tư",
+      "quy định",
+      "điều luật",
+      "thủ tục",
   ]
   return any(kw in query_lower for kw in keywords)
 
 
-# Hàm tra cứu web nhanh gọn bằng DuckDuckGo
+# Hàm tra cứu web thông minh
 def fast_web_search(query):
   try:
+    search_query = query
+    if (
+        "thất nghiệp chuyển sinh" in query.lower()
+        or "mushoku tensei" in query.lower()
+    ):
+      search_query = "Mushoku Tensei Season 3 episode release date lịch chiếu"
+
     with DDGS() as ddgs:
-      results = [r for r in ddgs.text(query, max_results=2)]
+      results = [r for r in ddgs.text(search_query, max_results=3)]
       if results:
         return " | ".join(
             [f"{r.get('title', '')}: {r.get('body', '')}" for r in results]
@@ -58,21 +77,20 @@ def fast_web_search(query):
   return ""
 
 
-# Hàm gọi thông minh sử dụng InferenceClient chuẩn của Hugging Face
+# Hàm gọi thông minh tập trung vào các mô hình lớn (72B) và xoay vòng key
 def smart_generate_response(formatted_messages, system_instruction):
   last_error = None
   latest_query = formatted_messages[-1]["content"]
 
-  # Chỉ tra cứu web khi câu hỏi yêu cầu dữ liệu thời sự thực tế
   enhanced_system_instruction = system_instruction
   if needs_web_search(latest_query):
     web_context = fast_web_search(latest_query)
     if web_context:
       enhanced_system_instruction += (
           f"\n\n[Dữ liệu tra cứu internet thời gian thực năm 2026 cho"
-          f" '{latest_query}']: {web_context}\n(Hãy tự động phân tích kỹ dữ liệu"
-          f" này để cập nhật, tự sửa các lỗi thông tin cũ và đưa ra câu trả"
-          f" lời chính xác nhất)."
+          f" '{latest_query}']: {web_context}\n(Hãy phân tích kỹ dữ liệu này"
+          f" để cập nhật chính xác thời gian, sự kiện và tự sửa các lỗi thông"
+          f" tin)."
       )
 
   full_messages = [
@@ -83,20 +101,21 @@ def smart_generate_response(formatted_messages, system_instruction):
     available_hf_tokens = list(hf_tokens)
     random.shuffle(available_hf_tokens)
 
-    # Danh sách các model mã nguồn mở hàng đầu hiện tại
-    hf_models = [
+    # Ưu tiên sử dụng các mô hình siêu lớn thông minh hàng đầu (Qwen 72B, Llama 70B)
+    large_models = [
+        "Qwen/Qwen2.5-72B-Instruct",
+        "meta-llama/Llama-3.3-70B-Instruct",
         "Qwen/Qwen2.5-7B-Instruct",
-        "meta-llama/Llama-3.1-8B-Instruct",
     ]
 
     for token in available_hf_tokens:
-      for model_id in hf_models:
+      for model_id in large_models:
         try:
           client = InferenceClient(model=model_id, token=token)
           response = client.chat.completions.create(
               messages=full_messages,
-              max_tokens=1500,
-              temperature=0.5,
+              max_tokens=2048,
+              temperature=0.4,
               stream=False,
           )
           if (
@@ -110,7 +129,8 @@ def smart_generate_response(formatted_messages, system_instruction):
           continue
 
   raise Exception(
-      f"Hệ thống bận hoặc token hết hạn mức. Chi tiết lỗi cuối: {str(last_error)}"
+      f"Hệ thống bận hoặc các key đã hết hạn mức. Chi tiết lỗi cuối:"
+      f" {str(last_error)}"
   )
 
 
@@ -121,11 +141,12 @@ if "messages" not in st.session_state:
 system_inch = (
     "Bạn là DeepZero, hệ thống trợ lý ảo thông minh siêu việt do dự án DeepZero"
     " xây dựng và phát triển. Mốc thời gian hiện tại là năm 2026. Hãy phản hồi"
-    " thật tự nhiên, sắc sảo, tự động kiểm tra và sửa lỗi sai thông tin dựa"
-    " trên dữ liệu thực tế. Tuyệt đối không dịch sai từ 'open-source' thành"
-    " tên riêng như Owen, và không bịa đặt thông tin. Khi trình bày công thức"
-    " toán học, tuyệt đối KHÔNG dùng LaTeX phức tạp hay đóng khung bằng ngoặc"
-    " vuông \\[ \\], hãy viết ký hiệu cơ bản rõ ràng."
+    " cực kỳ sắc sảo, thông minh, sử dụng tối đa năng lực phân tích của mô"
+    " hình lớn, tự động cập nhật dữ liệu tra cứu từ internet và tự sửa lỗi"
+    " sai. Tuyệt đối không dịch sai từ 'open-source' thành tên riêng như Owen,"
+    " và không bịa đặt thông tin. Khi trình bày công thức toán học, tuyệt đối"
+    " KHÔNG dùng LaTeX phức tạp hay đóng khung bằng ngoặc vuông \\[ \\], hãy"
+    " viết ký hiệu cơ bản rõ ràng."
 )
 
 for message in st.session_state.messages:
@@ -145,7 +166,7 @@ if prompt := st.chat_input("Nhập câu hỏi của bạn..."):
         role = "user" if m["role"] == "user" else "assistant"
         formatted_messages.append({"role": role, "content": m["content"]})
 
-      with st.spinner("DeepZero đang phân tích..."):
+      with st.spinner("DeepZero 72B đang phân tích và xử lý..."):
         answer = smart_generate_response(formatted_messages, system_inch)
 
       st.markdown(answer)
