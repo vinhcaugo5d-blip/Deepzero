@@ -1,9 +1,9 @@
 from datetime import datetime
 import os
 import random
-import requests
 import streamlit as st
 from duckduckgo_search import DDGS
+from huggingface_hub import InferenceClient
 
 # Cấu hình giao diện trang web
 st.set_page_config(
@@ -13,10 +13,10 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Ultra-Fast Core)")
+st.title("🤖 DeepZero AI Assistant (Stable Hub Core)")
 st.markdown(
-    "*Trợ lý ảo tối ưu hóa tốc độ cao - Tự động tra cứu thông minh và tự sửa lỗi"
-    " thời gian thực.*"
+    "*Trợ lý ảo tối ưu hóa tốc độ cao - Kết nối chuẩn qua Hugging Face Hub"
+    " Client.*"
 )
 
 # Lấy token Hugging Face từ Streamlit Secrets
@@ -58,7 +58,7 @@ def fast_web_search(query):
   return ""
 
 
-# Hàm gọi thông minh tối ưu độc lập qua Hugging Face (Siêu nhanh, chống lỗi)
+# Hàm gọi thông minh sử dụng InferenceClient chuẩn của Hugging Face
 def smart_generate_response(formatted_messages, system_instruction):
   last_error = None
   latest_query = formatted_messages[-1]["content"]
@@ -82,8 +82,8 @@ def smart_generate_response(formatted_messages, system_instruction):
   if hf_tokens:
     available_hf_tokens = list(hf_tokens)
     random.shuffle(available_hf_tokens)
-    
-    # Sử dụng các model mã nguồn mở hiệu năng cao và ổn định nhất hiện tại
+
+    # Danh sách các model mã nguồn mở hàng đầu hiện tại
     hf_models = [
         "Qwen/Qwen2.5-7B-Instruct",
         "meta-llama/Llama-3.1-8B-Instruct",
@@ -91,30 +91,20 @@ def smart_generate_response(formatted_messages, system_instruction):
 
     for token in available_hf_tokens:
       for model_id in hf_models:
-        api_url = f"https://api-inference.huggingface.co/models/{model_id}/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": model_id,
-            "messages": full_messages,
-            "max_tokens": 1500,
-            "temperature": 0.5,
-            "stream": False,
-        }
         try:
-          response = requests.post(
-              api_url, headers=headers, json=payload, timeout=10
+          client = InferenceClient(model=model_id, token=token)
+          response = client.chat.completions.create(
+              messages=full_messages,
+              max_tokens=1500,
+              temperature=0.5,
+              stream=False,
           )
-          if response.status_code == 200:
-            res_json = response.json()
-            if "choices" in res_json and len(res_json["choices"]) > 0:
-              content = res_json["choices"][0]["message"]["content"]
-              if content:
-                return content
-          else:
-            last_error = f"HTTP {response.status_code}: {response.text}"
+          if (
+              response
+              and response.choices
+              and response.choices[0].message.content
+          ):
+            return response.choices[0].message.content
         except Exception as e:
           last_error = e
           continue
