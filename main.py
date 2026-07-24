@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Resilient Core)")
+st.title("🤖 DeepZero AI Assistant (Clean Display Core)")
 st.markdown(
     "*Hệ thống trợ lý ảo phát triển bởi DeepZero dựa trên việc ưu tiên sử dụng"
     " các mô hình ngôn ngữ mã nguồn mở hiệu năng cao.*"
@@ -46,7 +46,6 @@ def smart_generate_response(formatted_messages, system_instruction):
 
     for token in available_hf_tokens:
       for model_id in hf_models:
-        # Thử lại tối đa 2 lần cho mỗi model/token nếu gặp lỗi mạng đột ngột
         for attempt in range(2):
           try:
             hf_client = InferenceClient(model=model_id, token=token)
@@ -60,7 +59,7 @@ def smart_generate_response(formatted_messages, system_instruction):
               return stream.choices[0].message.content
           except Exception as e:
             last_error = e
-            time.sleep(1)  # Chờ 1 giây rồi thử lại
+            time.sleep(1)
             continue
 
   # 2. DỰ PHÒNG: Google Gemini keys
@@ -100,7 +99,7 @@ def smart_generate_response(formatted_messages, system_instruction):
           continue
 
   raise Exception(
-      f"Kết nối mạng tới máy chủ AI bị gián đoạn (SSL/Network Error). Chi tiết:"
+      f"Kết nối mạng tới máy chủ AI bị gián đoạn hoặc hết hạn mức. Chi tiết:"
       f" {str(last_error)}"
   )
 
@@ -109,15 +108,18 @@ def smart_generate_response(formatted_messages, system_instruction):
 if "messages" not in st.session_state:
   st.session_state.messages = []
 
+# Cập nhật System Instruction chuẩn hóa hiển thị, không dùng LaTeX thô
 system_inch = (
     "Bạn là DeepZero, một hệ thống trợ lý ảo thông minh siêu việt do dự án"
     " DeepZero xây dựng và phát triển. Hệ thống vận hành bằng cách kế thừa, tích"
     " hợp và tối ưu hóa các nền tảng công nghệ mã nguồn mở (open-source) hàng"
     " đầu. Tuyệt đối không dịch sai từ 'open-source' thành tên riêng như Owen,"
-    " và không bịa đặt bất kỳ thông tin sai lệch nào. Luôn giữ thái độ trung"
-    " thực, minh bạch rằng DeepZero sử dụng mã nguồn mở làm nền tảng để tinh"
-    " chỉnh và phát triển. Phản hồi của bạn cần sắc sảo, logic, trình bày rõ"
-    " ràng, mạch lạc và tối ưu hóa tuyệt đối tốc độ xử lý."
+    " và không bịa đặt bất kỳ thông tin sai lệch nào. **QUAN TRỌNG:** Khi trình"
+    " bày các công thức toán học, tuyệt đối KHÔNG sử dụng các ký hiệu LaTeX phức"
+    " tạp hay đóng khung bằng dấu ngoặc vuông như \\[ \\], hãy viết rõ ràng, mạch"
+    " lạc bằng văn bản thông thường hoặc ký hiệu ký tự cơ bản (ví dụ: C(5,2)"
+    " = (5*4)/(2*1) = 10) để hiển thị không bao giờ bị lỗi trên giao diện"
+    " web. Phản hồi của bạn cần sắc sảo, logic và trình bày rõ ràng."
 )
 
 for message in st.session_state.messages:
