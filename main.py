@@ -1,9 +1,7 @@
 from datetime import datetime
 import os
 import random
-import time
-import google.generativeai as genai
-from huggingface_hub import InferenceClient
+import requests
 import streamlit as st
 
 # Cấu hình giao diện trang web
@@ -14,96 +12,98 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Ultra-Stable Core)")
+st.title("🤖 DeepZero AI Assistant (Lightning Speed Core)")
 st.markdown(
-    "*Hệ thống trợ lý ảo phát triển bởi DeepZero dựa trên việc ưu tiên sử dụng"
-    " các mô hình ngôn ngữ mã nguồn mở hiệu năng cao.*"
+    "*Hệ thống trợ lý ảo phát triển bởi DeepZero - Tối ưu hóa tốc độ xử lý đỉnh"
+    " cao.*"
 )
 
-# Lấy danh sách token từ Streamlit Secrets
+# Lấy danh sách Hugging Face Tokens từ Streamlit Secrets
 hf_tokens = st.secrets.get("HF_TOKENS", [])
 if not hf_tokens and "HF_TOKEN" in st.secrets:
   hf_tokens = [st.secrets.get("HF_TOKEN")]
 
+# Dự phòng Google keys nếu cần
 gemini_keys = st.secrets.get("GEMINI_API_KEYS", [])
 if not gemini_keys and "GEMINI_API_KEY" in st.secrets:
   gemini_keys = [st.secrets.get("GEMINI_API_KEY")]
 
 
-# Hàm gọi thông minh xử lý an toàn tuyệt đối, chống lỗi đóng luồng stream
+# Hàm gọi trực tiếp qua HTTP Requests (Siêu tốc, chống đóng luồng tuyệt đối)
 def smart_generate_response(formatted_messages, system_instruction):
   last_error = None
 
-  # 1. ƯU TIÊN SỐ 1: Hugging Face Tokens (dùng chuẩn text response, không stream)
+  # 1. Ưu tiên tuyệt đối Hugging Face qua cổng HTTP trực tiếp (Cực nhanh)
   if hf_tokens:
     available_hf_tokens = list(hf_tokens)
     random.shuffle(available_hf_tokens)
-    hf_models = [
-        "Qwen/Qwen2.5-Coder-32B-Instruct",
-        "meta-llama/Llama-3.1-8B-Instruct",
-        "Qwen/Qwen2.5-7B-Instruct",
-    ]
+
+    # Sử dụng model Qwen siêu nhanh và nhạy bén
+    api_url = (
+        "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-7B-Instruct/v1/chat/completions"
+    )
+
+    # Đưa system instruction vào đầu danh sách tin nhắn
+    full_messages = [{"role": "system", "content": system_instruction}] + formatted_messages
 
     for token in available_hf_tokens:
-      for model_id in hf_models:
-        for attempt in range(2):
-          try:
-            hf_client = InferenceClient(model=model_id, token=token)
-            # Dùng text_generation hoặc chat_completion không stream và lấy trực tiếp nội dung
-            response = hf_client.chat_completion(
-                messages=formatted_messages,
-                max_tokens=2048,
-                temperature=0.6,
-                stream=False,
-            )
-            if response and response.choices:
-              content = response.choices[0].message.content
-              if content:
-                return content
-          except Exception as e:
-            last_error = e
-            time.sleep(1)
-            continue
+      headers = {
+          "Authorization": f"Bearer {token}",
+          "Content-Type": "application/json",
+      }
+      payload = {
+          "model": "Qwen/Qwen2.5-7B-Instruct",
+          "messages": full_messages,
+          "max_tokens": 1500,
+          "temperature": 0.6,
+          "stream": False,
+      }
 
-  # 2. DỰ PHÒNG: Google Gemini keys
+      try:
+        response = requests.post(
+            api_url, headers=headers, json=payload, timeout=15
+        )
+        if response.status_code == 200:
+          res_json = response.json()
+          if "choices" in res_json and len(res_json["choices"]) > 0:
+            content = res_json["choices"][0]["message"]["content"]
+            if content:
+              return content
+        else:
+          last_error = f"HTTP {response.status_code}: {response.text}"
+      except Exception as e:
+        last_error = e
+        continue
+
+  # 2. Dự phòng bằng Google Gemini nếu HF quá tải
   if gemini_keys:
+    import google.generativeai as genai
+
     available_gemini_keys = list(gemini_keys)
     random.shuffle(available_gemini_keys)
-
     for token in available_gemini_keys:
-      for attempt in range(2):
-        try:
-          genai.configure(api_key=token)
-          generation_config = {
-              "temperature": 0.7,
-              "max_output_tokens": 2048,
-          }
-          model = genai.GenerativeModel(
-              model_name="gemini-1.5-flash",
-              system_instruction=system_instruction,
-              generation_config=generation_config,
-          )
-
-          chat_history = []
-          for i in range(len(formatted_messages) - 1):
-            m = formatted_messages[i]
-            role = "user" if m["role"] == "user" else "model"
-            chat_history.append({"role": role, "parts": [m["content"]]})
-
-          chat = model.start_chat(history=chat_history)
-          last_user_message = formatted_messages[-1]["content"]
-
-          response = chat.send_message(last_user_message)
-          if response and response.text:
-            return response.text
-        except Exception as e:
-          last_error = e
-          time.sleep(1)
-          continue
+      try:
+        genai.configure(api_key=token)
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash", system_instruction=system_instruction
+        )
+        chat_history = [
+            {
+                "role": "user" if m["role"] == "user" else "model",
+                "parts": [m["content"]],
+            }
+            for m in formatted_messages[:-1]
+        ]
+        chat = model.start_chat(history=chat_history)
+        res = chat.send_message(formatted_messages[-1]["content"])
+        if res and res.text:
+          return res.text
+      except Exception as e:
+        last_error = e
+        continue
 
   raise Exception(
-      f"Tất cả các nguồn cấp dữ liệu đều gặp sự cố hoặc hết hạn mức. Chi tiết:"
-      f" {str(last_error)}"
+      f"Hệ thống bận hoặc token hết hạn mức. Chi tiết lỗi cuối: {str(last_error)}"
   )
 
 
@@ -119,9 +119,9 @@ system_inch = (
     " và không bịa đặt bất kỳ thông tin sai lệch nào. **QUAN TRỌNG:** Khi trình"
     " bày các công thức toán học, tuyệt đối KHÔNG sử dụng các ký hiệu LaTeX phức"
     " tạp hay đóng khung bằng dấu ngoặc vuông như \\[ \\], hãy viết rõ ràng, mạch"
-    " lạc bằng văn bản thông thường hoặc ký hiệu ký tự cơ bản (ví dụ: C(5,2)"
-    " = (5*4)/(2*1) = 10) để hiển thị không bao giờ bị lỗi trên giao diện"
-    " web. Phản hồi của bạn cần sắc sảo, logic và trình bày rõ ràng."
+    " lạc bằng văn bản thông thường hoặc ký hiệu ký tự cơ bản để hiển thị không"
+    " bao giờ bị lỗi trên giao diện web. Phản hồi của bạn cần sắc sảo, logic"
+    " và trình bày rõ ràng."
 )
 
 for message in st.session_state.messages:
@@ -156,7 +156,7 @@ if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn...")
         role = "user" if m["role"] == "user" else "assistant"
         formatted_messages.append({"role": role, "content": m["content"]})
 
-      with st.spinner("DeepZero đang phân tích và xử lý yêu cầu..."):
+      with st.spinner("DeepZero đang phản hồi cực tốc độ..."):
         answer = smart_generate_response(formatted_messages, system_inch)
 
       st.markdown(answer)
