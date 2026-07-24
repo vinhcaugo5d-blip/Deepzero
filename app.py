@@ -1,7 +1,7 @@
 from datetime import datetime
 import os
 import random
-import google.generativeai as genai
+from google import genai
 import streamlit as st
 
 # Cấu hình giao diện trang web
@@ -12,47 +12,32 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-# Giao diện tiêu đề chính
 st.title("🤖 DeepZero AI Assistant (Online 24/7)")
 st.markdown(
     "*Hệ thống trợ lý ảo phát triển bởi DeepZero dựa trên việc kế thừa và tối"
     " ưu hóa các nền tảng công nghệ mã nguồn mở.*"
 )
 
-# Lấy danh sách API keys từ Streamlit Secrets an toàn tuyệt đối
+# Lấy danh sách API keys từ Streamlit Secrets
 api_keys = st.secrets.get("GEMINI_API_KEYS", [])
-
-# Fallback nếu dùng cấu hình đơn lẻ
 if not api_keys and "GEMINI_API_KEY" in st.secrets:
   api_keys = [st.secrets.get("GEMINI_API_KEY")]
 
 
-# Hàm cấu hình và khởi tạo mô hình Gemini với cơ chế xoay vòng thông minh
-def get_random_gemini_model():
+# Khởi tạo client với thư viện google-genai mới nhất hỗ trợ key AQ.
+def get_gemini_client():
   if not api_keys:
     raise ValueError(
         "Chưa cấu hình danh sách GEMINI_API_KEYS trong Streamlit Secrets!"
     )
-
   chosen_key = random.choice(api_keys)
-  genai.configure(api_key=chosen_key)
-  generation_config = {"temperature": 0.7, "max_output_tokens": 600}
-  # Sử dụng gemini-3.5-flash chuẩn mới nhất để tương thích hoàn hảo
-  return genai.GenerativeModel(
-      model_name="gemini-3.5-flash", generation_config=generation_config
-  )
+  return genai.Client(api_key=chosen_key)
 
-
-try:
-  model = get_random_gemini_model()
-except Exception as e:
-  st.error(f"Lỗi khởi tạo mô hình Gemini: {str(e)}")
 
 # Khởi tạo lịch sử trò chuyện
 if "messages" not in st.session_state:
   st.session_state.messages = []
 
-# Định nghĩa System Instructions nhận diện thương hiệu DeepZero
 system_instruction_content = (
     "Bạn là DeepZero, một hệ thống trợ lý ảo thông minh do dự án DeepZero xây"
     " dựng và phát triển. Hệ thống vận hành bằng cách kế thừa, tích hợp và"
@@ -63,13 +48,11 @@ system_instruction_content = (
     " phát triển."
 )
 
-# Hiển thị giao diện lịch sử chat
 for message in st.session_state.messages:
   with st.chat_message(message["role"]):
     st.markdown(message["content"])
 
 
-# Hàm ghi nhận dữ liệu phục vụ tự tối ưu & tự học (Self-Learning logs)
 def log_for_self_improvement(user_prompt, ai_response):
   log_entry = (
       f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] User:"
@@ -84,33 +67,38 @@ def log_for_self_improvement(user_prompt, ai_response):
     pass
 
 
-# Xử lý nhập liệu từ người dùng
 if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn..."):
   st.session_state.messages.append({"role": "user", "content": prompt})
   with st.chat_message("user"):
     st.markdown(prompt)
 
   with st.chat_message("assistant"):
-    with st.spinner("DeepZero đang xử lý..."):
-      try:
-        active_model = get_random_gemini_model()
+    try:
+      client = get_gemini_client()
 
-        chat_history = []
-        for m in st.session_state.messages[:-1]:
-          role_mapped = "user" if m["role"] == "user" else "model"
-          chat_history.append({"role": role_mapped, "parts": [m["content"]]})
+      # Chuyển đổi lịch sử chat sang định dạng chuẩn của SDK mới
+      formatted_contents = []
+      for m in st.session_state.messages:
+        role = "user" if m["role"] == "user" else "model"
+        formatted_contents.append({"role": role, "parts": [{"text": m["content"]}]})
 
-        chat_session = active_model.start_chat(history=chat_history)
-        response = chat_session.send_message(
-            f"[System Directive]: {system_instruction_content}\n\nUser request:"
-            f" {prompt}"
-        )
+      # Thêm System Instruction vào đầu ngữ cảnh
+      full_contents = [
+          {"role": "user", "parts": [{"text": f"[System Directive]: {system_instruction_content}"}]},
+          {"role": "model", "parts": [{"text": "Đã hiểu chỉ thị hệ thống."}]},
+      ] + formatted_contents
 
-        answer = response.text.strip()
-      except Exception as e:
-        answer = f"Đã xảy ra lỗi kết nối hệ thống: {str(e)}"
+      response = client.models.generate_content(
+          model="gemini-2.5-flash",
+          contents=full_contents,
+      )
 
+      answer = response.text.strip()
       st.markdown(answer)
       st.session_state.messages.append({"role": "assistant", "content": answer})
-
       log_for_self_improvement(prompt, answer)
+
+    except Exception as e:
+      error_msg = f"Đã xảy ra lỗi kết nối hệ thống: {str(e)}"
+      st.error(error_msg)
+      st.session_state.messages.append({"role": "assistant", "content": error_msg})
