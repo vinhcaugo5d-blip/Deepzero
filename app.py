@@ -1,7 +1,7 @@
 from datetime import datetime
 import os
 import random
-from google import genai
+import google.generativeai as genai
 import streamlit as st
 
 # Cấu hình giao diện trang web
@@ -24,15 +24,24 @@ if not api_keys and "GEMINI_API_KEY" in st.secrets:
   api_keys = [st.secrets.get("GEMINI_API_KEY")]
 
 
-# Khởi tạo client với thư viện google-genai mới nhất
-def get_gemini_client():
+# Khởi tạo mô hình Gemini với cơ chế xoay vòng key
+def get_random_gemini_model():
   if not api_keys:
     raise ValueError(
         "Chưa cấu hình danh sách GEMINI_API_KEYS trong Streamlit Secrets!"
     )
   chosen_key = random.choice(api_keys)
-  return genai.Client(api_key=chosen_key)
+  genai.configure(api_key=chosen_key)
+  generation_config = {"temperature": 0.7, "max_output_tokens": 1500}
+  return genai.GenerativeModel(
+      model_name="gemini-2.5-flash", generation_config=generation_config
+  )
 
+
+try:
+  model = get_random_gemini_model()
+except Exception as e:
+  st.error(f"Lỗi khởi tạo mô hình Gemini: {str(e)}")
 
 # Khởi tạo lịch sử trò chuyện
 if "messages" not in st.session_state:
@@ -74,35 +83,25 @@ if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn...")
 
   with st.chat_message("assistant"):
     try:
-      client = get_gemini_client()
+      active_model = get_random_gemini_model()
 
-      # Xây dựng nội dung lịch sử chat cho SDK mới
-      formatted_contents = []
-      for m in st.session_state.messages:
-        role = "user" if m["role"] == "user" else "model"
-        formatted_contents.append(
-            {"role": role, "parts": [{"text": m["content"]}]}
-        )
+      chat_history = []
+      for m in st.session_state.messages[:-1]:
+        role_mapped = "user" if m["role"] == "user" else "model"
+        chat_history.append({"role": role_mapped, "parts": [m["content"]]})
 
-      full_contents = [
-          {
-              "role": "user",
-              "parts": [{
-                  "text": f"[System Directive]: {system_instruction_content}"
-              }],
-          },
-          {"role": "model", "parts": [{"text": "Đã hiểu chỉ thị hệ thống."}]},
-      ] + formatted_contents
+      chat_session = active_model.start_chat(history=chat_history)
 
-      # Sử dụng streaming để phản hồi nhanh ngay lập tức từng chữ
-      response_stream = client.models.generate_content_stream(
-          model="gemini-2.5-flash",
-          contents=full_contents,
+      # Gửi tin nhắn kèm chỉ thị hệ thống và bật stream trực tiếp
+      response = chat_session.send_message(
+          f"[System Directive]: {system_instruction_content}\n\nUser request:"
+          f" {prompt}",
+          stream=True,
       )
 
-      # Hiển thị trực tiếp dòng chữ chạy ra
+      # Hiển thị từng chữ chảy ra thời gian thực
       answer = st.write_stream(
-          chunk.text for chunk in response_stream if chunk.text
+          chunk.text for chunk in response if chunk.text
       )
 
       st.session_state.messages.append(
