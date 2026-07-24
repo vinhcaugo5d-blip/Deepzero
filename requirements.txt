@@ -1,8 +1,9 @@
 streamlit
+openai
+duckduckgo-search
+huggingface-hub
 google-generativeai
 fastapi
 uvicorn
 requests
-huggingface_hub
 pydantic
-duckduckgo_search
