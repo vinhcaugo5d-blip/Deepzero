@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Clean Display Core)")
+st.title("🤖 DeepZero AI Assistant (Ultra-Stable Core)")
 st.markdown(
     "*Hệ thống trợ lý ảo phát triển bởi DeepZero dựa trên việc ưu tiên sử dụng"
     " các mô hình ngôn ngữ mã nguồn mở hiệu năng cao.*"
@@ -30,11 +30,11 @@ if not gemini_keys and "GEMINI_API_KEY" in st.secrets:
   gemini_keys = [st.secrets.get("GEMINI_API_KEY")]
 
 
-# Hàm gọi thông minh có cơ chế thử lại khi lỗi mạng / SSL
+# Hàm gọi thông minh xử lý an toàn tuyệt đối, chống lỗi đóng luồng stream
 def smart_generate_response(formatted_messages, system_instruction):
   last_error = None
 
-  # 1. ƯU TIÊN SỐ 1: Hugging Face Tokens (có thử lại khi rớt mạng)
+  # 1. ƯU TIÊN SỐ 1: Hugging Face Tokens (dùng chuẩn text response, không stream)
   if hf_tokens:
     available_hf_tokens = list(hf_tokens)
     random.shuffle(available_hf_tokens)
@@ -49,14 +49,17 @@ def smart_generate_response(formatted_messages, system_instruction):
         for attempt in range(2):
           try:
             hf_client = InferenceClient(model=model_id, token=token)
-            stream = hf_client.chat_completion(
+            # Dùng text_generation hoặc chat_completion không stream và lấy trực tiếp nội dung
+            response = hf_client.chat_completion(
                 messages=formatted_messages,
                 max_tokens=2048,
                 temperature=0.6,
                 stream=False,
             )
-            if stream.choices and stream.choices[0].message.content:
-              return stream.choices[0].message.content
+            if response and response.choices:
+              content = response.choices[0].message.content
+              if content:
+                return content
           except Exception as e:
             last_error = e
             time.sleep(1)
@@ -99,7 +102,7 @@ def smart_generate_response(formatted_messages, system_instruction):
           continue
 
   raise Exception(
-      f"Kết nối mạng tới máy chủ AI bị gián đoạn hoặc hết hạn mức. Chi tiết:"
+      f"Tất cả các nguồn cấp dữ liệu đều gặp sự cố hoặc hết hạn mức. Chi tiết:"
       f" {str(last_error)}"
   )
 
@@ -108,7 +111,6 @@ def smart_generate_response(formatted_messages, system_instruction):
 if "messages" not in st.session_state:
   st.session_state.messages = []
 
-# Cập nhật System Instruction chuẩn hóa hiển thị, không dùng LaTeX thô
 system_inch = (
     "Bạn là DeepZero, một hệ thống trợ lý ảo thông minh siêu việt do dự án"
     " DeepZero xây dựng và phát triển. Hệ thống vận hành bằng cách kế thừa, tích"
