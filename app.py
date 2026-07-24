@@ -2,9 +2,9 @@ from datetime import datetime
 import os
 import random
 import re
+from openai import OpenAI
 import streamlit as st
 from duckduckgo_search import DDGS
-from huggingface_hub import InferenceClient
 
 st.set_page_config(
     page_title="DeepZero AI Assistant",
@@ -13,10 +13,10 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Clean Stable Core)")
+st.title("🤖 DeepZero AI Assistant (72B Multi-Core Fallback)")
 st.markdown(
-    "*Trợ lý ảo tối ưu hóa tốc độ cao - Nền tảng ổn định, tự động tra cứu"
-    " thông minh.*"
+    "*Trợ lý ảo cao cấp - Tự động chuyển ngầm khi model từ chối/hết hạn mức, tích"
+    " hợp tra cứu thông minh.*"
 )
 
 hf_tokens = st.secrets.get("HF_TOKENS", [])
@@ -38,33 +38,41 @@ def web_search(query):
 
 
 def smart_generate_response(formatted_messages, system_instruction):
-  last_error = None
-
   if not hf_tokens:
     raise Exception(
-        "Chưa cấu hình Hugging Face Token trong Streamlit Secrets (HF_TOKENS hoặc"
-        " HF_TOKEN)."
+        "Chưa cấu hình Token trong Streamlit Secrets (HF_TOKENS hoặc HF_TOKEN)."
     )
 
   available_hf_tokens = list(hf_tokens)
   random.shuffle(available_hf_tokens)
 
-  models_to_try = [
+  # Danh sách mô hình nền móng: Ưu tiên 72B đầu bảng, nếu lỗi/từ chối ngầm chuyển sang các model dự phòng khác
+  models_chain = [
+      "Qwen/Qwen2.5-72B-Instruct",
+      "meta-llama/Llama-3.3-70B-Instruct",
       "Qwen/Qwen2.5-7B-Instruct",
       "meta-llama/Llama-3.1-8B-Instruct",
   ]
 
+  last_error = None
+
+  # Vòng lặp duyệt qua từng token và từng mô hình trong chuỗi
   for token in available_hf_tokens:
-    for model_id in models_to_try:
+    for model_id in models_chain:
       try:
-        client = InferenceClient(model=model_id, token=token)
+        client = OpenAI(
+            base_url="https://router.huggingface.co/v1", api_key=token
+        )
 
         full_messages = [
             {"role": "system", "content": system_instruction}
         ] + formatted_messages
+
+        # Lần gọi thứ 1: Sinh phản hồi / hoặc lệnh [SEARCH]
         response = client.chat.completions.create(
+            model=model_id,
             messages=full_messages,
-            max_tokens=1500,
+            max_tokens=2048,
             temperature=0.4,
             stream=False,
         )
@@ -74,6 +82,7 @@ def smart_generate_response(formatted_messages, system_instruction):
 
         initial_reply = response.choices[0].message.content
 
+        # Kiểm tra xem mô hình có yêu cầu tra cứu web không
         search_match = re.search(r"\[SEARCH:\s*(.*?)\]", initial_reply)
         if search_match:
           search_query = search_match.group(1).strip()
@@ -85,17 +94,18 @@ def smart_generate_response(formatted_messages, system_instruction):
                   "role": "user",
                   "content": (
                       f"[Hệ thống tự động tra cứu thông tin cho từ khóa"
-                      f" '{search_query}']: {search_data}\n\nHãy dựa vào dữ"
-                      f" liệu thực tế này để viết câu trả lời chính xác, đầy đủ"
-                      f" và tự nhiên nhất cho người dùng (tuyệt đối không hiển"
-                      f" thị thẻ [SEARCH] nữa)."
+                      f" '{search_query}']: {search_data}\n\nHãy dựa vào dữ liệu"
+                      f" thực tế này để viết câu trả lời chính xác, đầy đủ và tự"
+                      f" nhiên nhất cho người dùng (tuyệt đối không hiển thị thẻ"
+                      f" [SEARCH] nữa)."
                   ),
               },
           ]
 
           final_response = client.chat.completions.create(
+              model=model_id,
               messages=follow_up_messages,
-              max_tokens=1500,
+              max_tokens=2048,
               temperature=0.4,
               stream=False,
           )
@@ -111,11 +121,13 @@ def smart_generate_response(formatted_messages, system_instruction):
           return initial_reply
 
       except Exception as e:
+        # Gặp lỗi (402, quá tải, từ chối...) -> Bỏ qua ngầm lập tức, chuyển sang model/token tiếp theo
         last_error = e
         continue
 
   raise Exception(
-      f"Hệ thống bận hoặc hết hạn mức. Chi tiết lỗi cuối: {str(last_error)}"
+      "Tất cả các mô hình và token trong chuỗi đều phản hồi lỗi hoặc bị từ"
+      f" chối (Chi tiết lỗi cuối: {str(last_error)})"
   )
 
 
