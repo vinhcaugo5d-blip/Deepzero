@@ -13,10 +13,10 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Base 7B/8B Core)")
+st.title("🤖 DeepZero AI Assistant (Clean Stable Core)")
 st.markdown(
-    "*Trợ lý ảo tối ưu hóa tốc độ cao - Nền tảng mô hình 7B/8B ổn định, tự động"
-    " tra cứu thông minh.*"
+    "*Trợ lý ảo tối ưu hóa tốc độ cao - Nền tảng ổn định, tự động tra cứu"
+    " thông minh.*"
 )
 
 hf_tokens = st.secrets.get("HF_TOKENS", [])
@@ -167,4 +167,4 @@ if prompt := st.chat_input("Nhập câu hỏi của bạn..."):
       st.error(error_msg)
       st.session_state.messages.append(
           {"role": "assistant", "content": error_msg}
-      )s
+      )
