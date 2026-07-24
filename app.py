@@ -1,8 +1,8 @@
 from datetime import datetime
 import os
 import random
+import requests
 import streamlit as st
-import google.generativeai as genai
 from duckduckgo_search import DDGS
 
 # Cấu hình giao diện trang web
@@ -13,21 +13,21 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Optimized Core)")
+st.title("🤖 DeepZero AI Assistant (Ultra-Fast Core)")
 st.markdown(
-    "*Trợ lý ảo thông minh tốc độ cao - Tự động tra cứu thông minh khi cần thiết.*"
+    "*Trợ lý ảo tối ưu hóa tốc độ cao - Tự động tra cứu thông minh và tự sửa lỗi"
+    " thời gian thực.*"
 )
 
-# Lấy danh sách Google keys từ Streamlit Secrets
-gemini_keys = st.secrets.get("GEMINI_API_KEYS", [])
-if not gemini_keys and "GEMINI_API_KEY" in st.secrets:
-  gemini_keys = [st.secrets.get("GEMINI_API_KEY")]
+# Lấy token Hugging Face từ Streamlit Secrets
+hf_tokens = st.secrets.get("HF_TOKENS", [])
+if not hf_tokens and "HF_TOKEN" in st.secrets:
+  hf_tokens = [st.secrets.get("HF_TOKEN")]
 
 
-# Hàm kiểm tra xem câu hỏi có thực sự cần tra cứu web hay không
+# Hàm kiểm tra xem câu hỏi có cần tra cứu internet hay không
 def needs_web_search(query):
   query_lower = query.lower()
-  # Các từ khóa kích hoạt tra cứu internet
   keywords = [
       "tin tức",
       "hôm nay",
@@ -44,7 +44,7 @@ def needs_web_search(query):
   return any(kw in query_lower for kw in keywords)
 
 
-# Hàm tra cứu web nhanh gọn
+# Hàm tra cứu web nhanh gọn bằng DuckDuckGo
 def fast_web_search(query):
   try:
     with DDGS() as ddgs:
@@ -58,46 +58,63 @@ def fast_web_search(query):
   return ""
 
 
-# Hàm gọi thông minh tối ưu tốc độ
+# Hàm gọi thông minh tối ưu độc lập qua Hugging Face (Siêu nhanh, chống lỗi)
 def smart_generate_response(formatted_messages, system_instruction):
   last_error = None
   latest_query = formatted_messages[-1]["content"]
 
-  # Chỉ tra cứu web khi thực sự cần thiết để đảm bảo tốc độ phản hồi nhanh nhất
+  # Chỉ tra cứu web khi câu hỏi yêu cầu dữ liệu thời sự thực tế
   enhanced_system_instruction = system_instruction
   if needs_web_search(latest_query):
     web_context = fast_web_search(latest_query)
     if web_context:
       enhanced_system_instruction += (
-          f"\n\n[Dữ liệu tra cứu internet năm 2026 cho '{latest_query}']: {web_context}"
+          f"\n\n[Dữ liệu tra cứu internet thời gian thực năm 2026 cho"
+          f" '{latest_query}']: {web_context}\n(Hãy tự động phân tích kỹ dữ liệu"
+          f" này để cập nhật, tự sửa các lỗi thông tin cũ và đưa ra câu trả"
+          f" lời chính xác nhất)."
       )
 
-  if gemini_keys:
-    available_gemini_keys = list(gemini_keys)
-    random.shuffle(available_gemini_keys)
+  full_messages = [
+      {"role": "system", "content": enhanced_system_instruction}
+  ] + formatted_messages
 
-    for token in available_gemini_keys:
-      # Sửa lại danh sách model chuẩn hiện hành, ưu tiên flash tốc độ cao
-      for model_name in ["gemini-2.5-flash", "gemini-1.5-flash"]:
+  if hf_tokens:
+    available_hf_tokens = list(hf_tokens)
+    random.shuffle(available_hf_tokens)
+    
+    # Sử dụng các model mã nguồn mở hiệu năng cao và ổn định nhất hiện tại
+    hf_models = [
+        "Qwen/Qwen2.5-7B-Instruct",
+        "meta-llama/Llama-3.1-8B-Instruct",
+    ]
+
+    for token in available_hf_tokens:
+      for model_id in hf_models:
+        api_url = f"https://api-inference.huggingface.co/models/{model_id}/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": model_id,
+            "messages": full_messages,
+            "max_tokens": 1500,
+            "temperature": 0.5,
+            "stream": False,
+        }
         try:
-          genai.configure(api_key=token)
-          generation_config = {"temperature": 0.6, "max_output_tokens": 2048}
-          model = genai.GenerativeModel(
-              model_name=model_name,
-              system_instruction=enhanced_system_instruction,
-              generation_config=generation_config,
+          response = requests.post(
+              api_url, headers=headers, json=payload, timeout=10
           )
-
-          chat_history = []
-          for i in range(len(formatted_messages) - 1):
-            m = formatted_messages[i]
-            role = "user" if m["role"] == "user" else "model"
-            chat_history.append({"role": role, "parts": [m["content"]]})
-
-          chat = model.start_chat(history=chat_history)
-          response = chat.send_message(latest_query)
-          if response and response.text:
-            return response.text
+          if response.status_code == 200:
+            res_json = response.json()
+            if "choices" in res_json and len(res_json["choices"]) > 0:
+              content = res_json["choices"][0]["message"]["content"]
+              if content:
+                return content
+          else:
+            last_error = f"HTTP {response.status_code}: {response.text}"
         except Exception as e:
           last_error = e
           continue
@@ -114,11 +131,11 @@ if "messages" not in st.session_state:
 system_inch = (
     "Bạn là DeepZero, hệ thống trợ lý ảo thông minh siêu việt do dự án DeepZero"
     " xây dựng và phát triển. Mốc thời gian hiện tại là năm 2026. Hãy phản hồi"
-    " thật tự nhiên, nhanh chóng, sắc sảo và đúng trọng tâm. Tuyệt đối không"
-    " dịch sai từ 'open-source' thành tên riêng như Owen, và không bịa đặt"
-    " thông tin. Khi trình bày công thức toán học, tuyệt đối KHÔNG dùng LaTeX"
-    " phức tạp hay đóng khung bằng ngoặc vuông \\[ \\], hãy viết ký hiệu cơ"
-    " bản rõ ràng."
+    " thật tự nhiên, sắc sảo, tự động kiểm tra và sửa lỗi sai thông tin dựa"
+    " trên dữ liệu thực tế. Tuyệt đối không dịch sai từ 'open-source' thành"
+    " tên riêng như Owen, và không bịa đặt thông tin. Khi trình bày công thức"
+    " toán học, tuyệt đối KHÔNG dùng LaTeX phức tạp hay đóng khung bằng ngoặc"
+    " vuông \\[ \\], hãy viết ký hiệu cơ bản rõ ràng."
 )
 
 for message in st.session_state.messages:
@@ -138,7 +155,7 @@ if prompt := st.chat_input("Nhập câu hỏi của bạn..."):
         role = "user" if m["role"] == "user" else "assistant"
         formatted_messages.append({"role": role, "content": m["content"]})
 
-      with st.spinner("DeepZero đang trả lời..."):
+      with st.spinner("DeepZero đang phân tích..."):
         answer = smart_generate_response(formatted_messages, system_inch)
 
       st.markdown(answer)
