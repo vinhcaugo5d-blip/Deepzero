@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import random
+import time
 import google.generativeai as genai
 from huggingface_hub import InferenceClient
 import streamlit as st
@@ -13,13 +14,13 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (HF-First Core)")
+st.title("🤖 DeepZero AI Assistant (Resilient Core)")
 st.markdown(
     "*Hệ thống trợ lý ảo phát triển bởi DeepZero dựa trên việc ưu tiên sử dụng"
     " các mô hình ngôn ngữ mã nguồn mở hiệu năng cao.*"
 )
 
-# Lấy danh sách Hugging Face Tokens và Google API Keys từ Streamlit Secrets
+# Lấy danh sách token từ Streamlit Secrets
 hf_tokens = st.secrets.get("HF_TOKENS", [])
 if not hf_tokens and "HF_TOKEN" in st.secrets:
   hf_tokens = [st.secrets.get("HF_TOKEN")]
@@ -29,11 +30,11 @@ if not gemini_keys and "GEMINI_API_KEY" in st.secrets:
   gemini_keys = [st.secrets.get("GEMINI_API_KEY")]
 
 
-# Hàm gọi thông minh: Ưu tiên Hugging Face trước, Gemini làm dự phòng
+# Hàm gọi thông minh có cơ chế thử lại khi lỗi mạng / SSL
 def smart_generate_response(formatted_messages, system_instruction):
   last_error = None
 
-  # 1. ƯU TIÊN SỐ 1: Sử dụng các Hugging Face Tokens trước
+  # 1. ƯU TIÊN SỐ 1: Hugging Face Tokens (có thử lại khi rớt mạng)
   if hf_tokens:
     available_hf_tokens = list(hf_tokens)
     random.shuffle(available_hf_tokens)
@@ -45,56 +46,61 @@ def smart_generate_response(formatted_messages, system_instruction):
 
     for token in available_hf_tokens:
       for model_id in hf_models:
-        try:
-          hf_client = InferenceClient(model=model_id, token=token)
-          stream = hf_client.chat_completion(
-              messages=formatted_messages,
-              max_tokens=2048,
-              temperature=0.6,
-              stream=False,
-          )
-          if stream.choices and stream.choices[0].message.content:
-            return stream.choices[0].message.content
-        except Exception as e:
-          last_error = e
-          continue
+        # Thử lại tối đa 2 lần cho mỗi model/token nếu gặp lỗi mạng đột ngột
+        for attempt in range(2):
+          try:
+            hf_client = InferenceClient(model=model_id, token=token)
+            stream = hf_client.chat_completion(
+                messages=formatted_messages,
+                max_tokens=2048,
+                temperature=0.6,
+                stream=False,
+            )
+            if stream.choices and stream.choices[0].message.content:
+              return stream.choices[0].message.content
+          except Exception as e:
+            last_error = e
+            time.sleep(1)  # Chờ 1 giây rồi thử lại
+            continue
 
-  # 2. DỰ PHÒNG: Nếu Hugging Face hết hạn mức hoặc lỗi, chuyển sang dùng Google Gemini keys
+  # 2. DỰ PHÒNG: Google Gemini keys
   if gemini_keys:
     available_gemini_keys = list(gemini_keys)
     random.shuffle(available_gemini_keys)
 
     for token in available_gemini_keys:
-      try:
-        genai.configure(api_key=token)
-        generation_config = {
-            "temperature": 0.7,
-            "max_output_tokens": 2048,
-        }
-        model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
-            system_instruction=system_instruction,
-            generation_config=generation_config,
-        )
+      for attempt in range(2):
+        try:
+          genai.configure(api_key=token)
+          generation_config = {
+              "temperature": 0.7,
+              "max_output_tokens": 2048,
+          }
+          model = genai.GenerativeModel(
+              model_name="gemini-1.5-flash",
+              system_instruction=system_instruction,
+              generation_config=generation_config,
+          )
 
-        chat_history = []
-        for i in range(len(formatted_messages) - 1):
-          m = formatted_messages[i]
-          role = "user" if m["role"] == "user" else "model"
-          chat_history.append({"role": role, "parts": [m["content"]]})
+          chat_history = []
+          for i in range(len(formatted_messages) - 1):
+            m = formatted_messages[i]
+            role = "user" if m["role"] == "user" else "model"
+            chat_history.append({"role": role, "parts": [m["content"]]})
 
-        chat = model.start_chat(history=chat_history)
-        last_user_message = formatted_messages[-1]["content"]
+          chat = model.start_chat(history=chat_history)
+          last_user_message = formatted_messages[-1]["content"]
 
-        response = chat.send_message(last_user_message)
-        if response and response.text:
-          return response.text
-      except Exception as e:
-        last_error = e
-        continue
+          response = chat.send_message(last_user_message)
+          if response and response.text:
+            return response.text
+        except Exception as e:
+          last_error = e
+          time.sleep(1)
+          continue
 
   raise Exception(
-      f"Tất cả các nguồn cấp dữ liệu đều gặp sự cố. Chi tiết lỗi cuối:"
+      f"Kết nối mạng tới máy chủ AI bị gián đoạn (SSL/Network Error). Chi tiết:"
       f" {str(last_error)}"
   )
 
