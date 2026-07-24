@@ -1,7 +1,7 @@
 from datetime import datetime
 import os
 import random
-import google.generativeai as genai
+from huggingface_hub import InferenceClient
 import streamlit as st
 
 # Cấu hình giao diện trang web
@@ -12,49 +12,72 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Online 24/7)")
+st.title("🤖 DeepZero AI Assistant (Pro Max Core)")
 st.markdown(
     "*Hệ thống trợ lý ảo phát triển bởi DeepZero dựa trên việc kế thừa và tối"
-    " ưu hóa các nền tảng công nghệ mã nguồn mở.*"
+    " ưu hóa các nền tảng công nghệ mã nguồn mở hiệu năng cao.*"
 )
 
-# Lấy danh sách API keys từ Streamlit Secrets
-api_keys = st.secrets.get("GEMINI_API_KEYS", [])
-if not api_keys and "GEMINI_API_KEY" in st.secrets:
-  api_keys = [st.secrets.get("GEMINI_API_KEY")]
+# Lấy danh sách Hugging Face Tokens hoàn toàn từ Streamlit Secrets (Bảo mật tuyệt đối)
+hf_tokens = st.secrets.get("HF_TOKENS", [])
+if not hf_tokens and "HF_TOKEN" in st.secrets:
+  hf_tokens = [st.secrets.get("HF_TOKEN")]
 
 
-# Sử dụng model gemini-3.5-flash chuẩn ổn định nhất hiện tại
-def get_random_gemini_model():
-  if not api_keys:
+# Thuật toán gọi API thông minh có cơ chế xoay vòng và tự động phục hồi khi lỗi
+def call_huggingface_with_failover(formatted_messages):
+  if not hf_tokens:
     raise ValueError(
-        "Chưa cấu hình danh sách GEMINI_API_KEYS trong Streamlit Secrets!"
+        "Chưa cấu hình danh sách HF_TOKENS trong Streamlit Secrets! Vui lòng"
+        " thiết lập secrets trên giao diện Streamlit."
     )
-  chosen_key = random.choice(api_keys)
-  genai.configure(api_key=chosen_key)
-  generation_config = {"temperature": 0.7, "max_output_tokens": 1500}
-  return genai.GenerativeModel(
-      model_name="gemini-3.5-flash", generation_config=generation_config
+
+  available_tokens = list(hf_tokens)
+  random.shuffle(available_tokens)
+
+  models_to_try = [
+      "Qwen/Qwen2.5-72B-Instruct",
+      "meta-llama/Meta-Llama-3-70B-Instruct",
+      "Qwen/Qwen2.5-Coder-32B-Instruct",
+  ]
+
+  last_error = None
+
+  for token in available_tokens:
+    for model_id in models_to_try:
+      try:
+        client = InferenceClient(model=model_id, token=token)
+        stream = client.chat_completion(
+            messages=formatted_messages,
+            max_tokens=2048,
+            temperature=0.6,
+            top_p=0.9,
+            stream=True,
+        )
+        return stream
+      except Exception as e:
+        last_error = e
+        continue
+
+  raise Exception(
+      f"Tất cả các token hoặc mô hình đều đang bận hoặc hết hạn mức. Chi tiết"
+      f" lỗi: {str(last_error)}"
   )
 
-
-try:
-  model = get_random_gemini_model()
-except Exception as e:
-  st.error(f"Lỗi khởi tạo mô hình Gemini: {str(e)}")
 
 # Khởi tạo lịch sử trò chuyện
 if "messages" not in st.session_state:
   st.session_state.messages = []
 
-system_instruction_content = (
-    "Bạn là DeepZero, một hệ thống trợ lý ảo thông minh do dự án DeepZero xây"
-    " dựng và phát triển. Hệ thống vận hành bằng cách kế thừa, tích hợp và"
-    " tối ưu hóa các nền tảng công nghệ mã nguồn mở (open-source) hàng đầu."
-    " Tuyệt đối không dịch sai từ 'open-source' thành tên riêng như Owen, và"
-    " không bịa đặt bất kỳ thông tin sai lệch nào. Luôn giữ thái độ trung thực,"
-    " minh bạch rằng DeepZero sử dụng mã nguồn mở làm nền tảng để tinh chỉnh và"
-    " phát triển."
+system_inch = (
+    "Bạn là DeepZero, một hệ thống trợ lý ảo thông minh siêu việt do dự án"
+    " DeepZero xây dựng và phát triển. Hệ thống vận hành bằng cách kế thừa, tích"
+    " hợp và tối ưu hóa các nền tảng công nghệ mã nguồn mở (open-source) hàng"
+    " đầu. Tuyệt đối không dịch sai từ 'open-source' thành tên riêng như Owen,"
+    " và không bịa đặt bất kỳ thông tin sai lệch nào. Luôn giữ thái độ trung"
+    " thực, minh bạch rằng DeepZero sử dụng mã nguồn mở làm nền tảng để tinh"
+    " chỉnh và phát triển. Phản hồi của bạn cần sắc sảo, logic, trình bày rõ"
+    " ràng, mạch lạc và tối ưu hóa tuyệt đối tốc độ xử lý."
 )
 
 for message in st.session_state.messages:
@@ -83,24 +106,22 @@ if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn...")
 
   with st.chat_message("assistant"):
     try:
-      active_model = get_random_gemini_model()
+      formatted_messages = [{"role": "system", "content": system_inch}]
+      recent_messages = st.session_state.messages[-15:]
+      for m in recent_messages:
+        role = "user" if m["role"] == "user" else "assistant"
+        formatted_messages.append({"role": role, "content": m["content"]})
 
-      chat_history = []
-      for m in st.session_state.messages[:-1]:
-        role_mapped = "user" if m["role"] == "user" else "model"
-        chat_history.append({"role": role_mapped, "parts": [m["content"]]})
+      stream = call_huggingface_with_failover(formatted_messages)
 
-      chat_session = active_model.start_chat(history=chat_history)
 
-      response = chat_session.send_message(
-          f"[System Directive]: {system_instruction_content}\n\nUser request:"
-          f" {prompt}",
-          stream=True,
-      )
+      def generate_stream():
+        for chunk in stream:
+          if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
 
-      answer = st.write_stream(
-          chunk.text for chunk in response if chunk.text
-      )
+
+      answer = st.write_stream(generate_stream())
 
       st.session_state.messages.append(
           {"role": "assistant", "content": answer}
@@ -108,7 +129,7 @@ if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn...")
       log_for_self_improvement(prompt, answer)
 
     except Exception as e:
-      error_msg = f"Đã xảy ra lỗi kết nối hệ thống: {str(e)}"
+      error_msg = f"⚠️ Lỗi hệ thống: {str(e)}"
       st.error(error_msg)
       st.session_state.messages.append(
           {"role": "assistant", "content": error_msg}
