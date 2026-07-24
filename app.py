@@ -6,7 +6,6 @@ import streamlit as st
 from duckduckgo_search import DDGS
 from huggingface_hub import InferenceClient
 
-# Cấu hình giao diện trang web
 st.set_page_config(
     page_title="DeepZero AI Assistant",
     page_icon="🤖",
@@ -14,18 +13,17 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Pro Core)")
+st.title("🤖 DeepZero AI Assistant (Base 7B/8B Core)")
 st.markdown(
-    "*Trợ lý ảo cấu hình cao - Tự động tra cứu thông minh và xử lý linh hoạt.*"
+    "*Trợ lý ảo tối ưu hóa tốc độ cao - Nền tảng mô hình 7B/8B ổn định, tự động"
+    " tra cứu thông minh.*"
 )
 
-# Lấy danh sách token từ Streamlit Secrets
 hf_tokens = st.secrets.get("HF_TOKENS", [])
 if not hf_tokens and "HF_TOKEN" in st.secrets:
   hf_tokens = [st.secrets.get("HF_TOKEN")]
 
 
-# Hàm tra cứu web thực tế
 def web_search(query):
   try:
     with DDGS() as ddgs:
@@ -39,7 +37,6 @@ def web_search(query):
   return "Không tìm thấy kết quả phù hợp."
 
 
-# Hàm gọi mô hình thông minh xử lý vòng lặp tự động tra cứu
 def smart_generate_response(formatted_messages, system_instruction):
   last_error = None
 
@@ -52,10 +49,7 @@ def smart_generate_response(formatted_messages, system_instruction):
   available_hf_tokens = list(hf_tokens)
   random.shuffle(available_hf_tokens)
 
-  # Danh sách mô hình sắp xếp theo độ ưu tiên từ lớn đến chuẩn
   models_to_try = [
-      "Qwen/Qwen2.5-72B-Instruct",
-      "meta-llama/Llama-3.3-70B-Instruct",
       "Qwen/Qwen2.5-7B-Instruct",
       "meta-llama/Llama-3.1-8B-Instruct",
   ]
@@ -65,13 +59,12 @@ def smart_generate_response(formatted_messages, system_instruction):
       try:
         client = InferenceClient(model=model_id, token=token)
 
-        # Lần gọi thứ 1: Cho model đọc tin nhắn và tự quyết định xem có cần gọi [SEARCH: ...] hay không
         full_messages = [
             {"role": "system", "content": system_instruction}
         ] + formatted_messages
         response = client.chat.completions.create(
             messages=full_messages,
-            max_tokens=2048,
+            max_tokens=1500,
             temperature=0.4,
             stream=False,
         )
@@ -81,15 +74,11 @@ def smart_generate_response(formatted_messages, system_instruction):
 
         initial_reply = response.choices[0].message.content
 
-        # Kiểm tra xem model có muốn tra cứu internet hay không (dựa vào thẻ [SEARCH: từ_khóa])
         search_match = re.search(r"\[SEARCH:\s*(.*?)\]", initial_reply)
         if search_match:
           search_query = search_match.group(1).strip()
-
-          # Thực hiện tra cứu ngầm
           search_data = web_search(search_query)
 
-          # Cung cấp kết quả tra cứu vào ngữ cảnh và yêu cầu model tổng hợp lại câu trả lời
           follow_up_messages = full_messages + [
               {"role": "assistant", "content": initial_reply},
               {
@@ -106,7 +95,7 @@ def smart_generate_response(formatted_messages, system_instruction):
 
           final_response = client.chat.completions.create(
               messages=follow_up_messages,
-              max_tokens=2048,
+              max_tokens=1500,
               temperature=0.4,
               stream=False,
           )
@@ -118,7 +107,6 @@ def smart_generate_response(formatted_messages, system_instruction):
           ):
             return final_response.choices[0].message.content
 
-        # Nếu không cần tra cứu, trả về luôn câu trả lời của model
         if initial_reply:
           return initial_reply
 
@@ -127,12 +115,10 @@ def smart_generate_response(formatted_messages, system_instruction):
         continue
 
   raise Exception(
-      f"Hệ thống bận hoặc các key đã hết hạn mức/yêu cầu thanh toán cho model"
-      f" lớn. Chi tiết lỗi cuối: {str(last_error)}"
+      f"Hệ thống bận hoặc hết hạn mức. Chi tiết lỗi cuối: {str(last_error)}"
   )
 
 
-# Khởi tạo lịch sử trò chuyện
 if "messages" not in st.session_state:
   st.session_state.messages = []
 
@@ -181,4 +167,4 @@ if prompt := st.chat_input("Nhập câu hỏi của bạn..."):
       st.error(error_msg)
       st.session_state.messages.append(
           {"role": "assistant", "content": error_msg}
-      )
+      )s
