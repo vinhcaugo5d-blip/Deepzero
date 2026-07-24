@@ -1,4 +1,3 @@
-from datetime import datetime
 import os
 import random
 import requests
@@ -12,10 +11,10 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Lightning Speed Core)")
+st.title("🤖 DeepZero AI Assistant (Lightning Core)")
 st.markdown(
-    "*Hệ thống trợ lý ảo phát triển bởi DeepZero - Tối ưu hóa tốc độ xử lý đỉnh"
-    " cao.*"
+    "*Hệ thống trợ lý ảo phát triển bởi DeepZero - Tối ưu hóa tốc độ và độ ổn"
+    " định cao nhất.*"
 )
 
 # Lấy danh sách Hugging Face Tokens từ Streamlit Secrets
@@ -23,27 +22,24 @@ hf_tokens = st.secrets.get("HF_TOKENS", [])
 if not hf_tokens and "HF_TOKEN" in st.secrets:
   hf_tokens = [st.secrets.get("HF_TOKEN")]
 
-# Dự phòng Google keys nếu cần
+# Dự phòng Google keys
 gemini_keys = st.secrets.get("GEMINI_API_KEYS", [])
 if not gemini_keys and "GEMINI_API_KEY" in st.secrets:
   gemini_keys = [st.secrets.get("GEMINI_API_KEY")]
 
 
-# Hàm gọi trực tiếp qua HTTP Requests (Siêu tốc, chống đóng luồng tuyệt đối)
+# Hàm gọi thông minh siêu tốc qua HTTP Requests
 def smart_generate_response(formatted_messages, system_instruction):
   last_error = None
 
-  # 1. Ưu tiên tuyệt đối Hugging Face qua cổng HTTP trực tiếp (Cực nhanh)
+  # 1. Ưu tiên tuyệt đối Hugging Face qua HTTP trực tiếp
   if hf_tokens:
     available_hf_tokens = list(hf_tokens)
     random.shuffle(available_hf_tokens)
 
-    # Sử dụng model Qwen siêu nhanh và nhạy bén
     api_url = (
         "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-7B-Instruct/v1/chat/completions"
     )
-
-    # Đưa system instruction vào đầu danh sách tin nhắn
     full_messages = [{"role": "system", "content": system_instruction}] + formatted_messages
 
     for token in available_hf_tokens:
@@ -75,7 +71,7 @@ def smart_generate_response(formatted_messages, system_instruction):
         last_error = e
         continue
 
-  # 2. Dự phòng bằng Google Gemini nếu HF quá tải
+  # 2. Dự phòng bằng Google Gemini nếu HF gặp sự cố
   if gemini_keys:
     import google.generativeai as genai
 
@@ -128,21 +124,6 @@ for message in st.session_state.messages:
   with st.chat_message(message["role"]):
     st.markdown(message["content"])
 
-
-def log_for_self_improvement(user_prompt, ai_response):
-  log_entry = (
-      f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] User:"
-      f" {user_prompt} | DeepZero: {ai_response}\n"
-  )
-  try:
-    with open(
-        "deepzero_learning_logs.txt", "a", encoding="utf-8"
-    ) as log_file:
-      log_file.write(log_entry)
-  except Exception:
-    pass
-
-
 if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn..."):
   st.session_state.messages.append({"role": "user", "content": prompt})
   with st.chat_message("user"):
@@ -163,7 +144,6 @@ if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn...")
       st.session_state.messages.append(
           {"role": "assistant", "content": answer}
       )
-      log_for_self_improvement(prompt, answer)
 
     except Exception as e:
       error_msg = f"⚠️ Lỗi hệ thống: {str(e)}"
