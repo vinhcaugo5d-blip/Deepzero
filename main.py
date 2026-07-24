@@ -1,3 +1,4 @@
+from datetime import datetime
 import os
 import random
 import requests
@@ -11,10 +12,10 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-st.title("🤖 DeepZero AI Assistant (Lightning Core)")
+st.title("🤖 DeepZero AI Assistant (Phase 2 - Web Search Core)")
 st.markdown(
-    "*Hệ thống trợ lý ảo phát triển bởi DeepZero - Tối ưu hóa tốc độ và độ ổn"
-    " định cao nhất.*"
+    "*Giai đoạn 2: Tích hợp thông tin thời gian thực (2026) và khả năng tra"
+    " cứu internet.*"
 )
 
 # Lấy danh sách Hugging Face Tokens từ Streamlit Secrets
@@ -28,9 +29,42 @@ if not gemini_keys and "GEMINI_API_KEY" in st.secrets:
   gemini_keys = [st.secrets.get("GEMINI_API_KEY")]
 
 
-# Hàm gọi thông minh siêu tốc qua HTTP Requests
+# Hàm hỗ trợ tra cứu thông tin nhanh trên web (dùng DuckDuckGo API miễn phí không cần key)
+def search_web(query):
+  try:
+    url = "https://html.duckduckgo.com/html/"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    data = {"q": query}
+    response = requests.post(url, headers=headers, data=data, timeout=5)
+    if response.status_code == 200:
+      from bs4 import BeautifulSoup
+
+      soup = BeautifulSoup(response.text, "html.parser")
+      results = []
+      for a in soup.find_all("a", class_="result__snippet", limit=3):
+        results.append(a.get_text())
+      if results:
+        return " | ".join(results)
+  except Exception:
+    pass
+  return ""
+
+
+# Hàm gọi thông minh tích hợp tra cứu web
 def smart_generate_response(formatted_messages, system_instruction):
   last_error = None
+
+  # Lấy nội dung câu hỏi mới nhất từ user để kiểm tra xem có cần tra cứu web không
+  latest_query = formatted_messages[-1]["content"]
+  web_context = search_web(latest_query)
+
+  # Nếu tìm thấy thông tin trên web, đính kèm vào ngữ cảnh hệ thống
+  enhanced_system_instruction = system_instruction
+  if web_context:
+    enhanced_system_instruction += (
+        f"\n\n[Dữ liệu tra cứu thời gian thực từ Internet năm 2026]:"
+        f" {web_context}"
+    )
 
   # 1. Ưu tiên tuyệt đối Hugging Face qua HTTP trực tiếp
   if hf_tokens:
@@ -40,7 +74,9 @@ def smart_generate_response(formatted_messages, system_instruction):
     api_url = (
         "https://api-inference.huggingface.co/models/Qwen/Qwen2.5-7B-Instruct/v1/chat/completions"
     )
-    full_messages = [{"role": "system", "content": system_instruction}] + formatted_messages
+    full_messages = [
+        {"role": "system", "content": enhanced_system_instruction}
+    ] + formatted_messages
 
     for token in available_hf_tokens:
       headers = {
@@ -81,7 +117,8 @@ def smart_generate_response(formatted_messages, system_instruction):
       try:
         genai.configure(api_key=token)
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash", system_instruction=system_instruction
+            model_name="gemini-1.5-flash",
+            system_instruction=enhanced_system_instruction,
         )
         chat_history = [
             {
@@ -109,22 +146,24 @@ if "messages" not in st.session_state:
 
 system_inch = (
     "Bạn là DeepZero, một hệ thống trợ lý ảo thông minh siêu việt do dự án"
-    " DeepZero xây dựng và phát triển. Hệ thống vận hành bằng cách kế thừa, tích"
-    " hợp và tối ưu hóa các nền tảng công nghệ mã nguồn mở (open-source) hàng"
-    " đầu. Tuyệt đối không dịch sai từ 'open-source' thành tên riêng như Owen,"
-    " và không bịa đặt bất kỳ thông tin sai lệch nào. **QUAN TRỌNG:** Khi trình"
-    " bày các công thức toán học, tuyệt đối KHÔNG sử dụng các ký hiệu LaTeX phức"
-    " tạp hay đóng khung bằng dấu ngoặc vuông như \\[ \\], hãy viết rõ ràng, mạch"
-    " lạc bằng văn bản thông thường hoặc ký hiệu ký tự cơ bản để hiển thị không"
-    " bao giờ bị lỗi trên giao diện web. Phản hồi của bạn cần sắc sảo, logic"
-    " và trình bày rõ ràng."
+    " DeepZero xây dựng và phát triển (Giai đoạn 2). Hệ thống vận hành bằng cách"
+    " kế thừa, tích hợp và tối ưu hóa các nền tảng công nghệ mã nguồn mở"
+    " (open-source) hàng đầu. **THÔNG TIN QUAN TRỌNG VỀ THỜI GIAN:** Hiện tại"
+    " đang là năm 2026. Mọi dữ liệu, thông tin thời sự hay câu hỏi đều phải căn"
+    " cứ vào mốc năm 2026 và dữ liệu tra cứu internet được cung cấp. Tuyệt đối"
+    " không dịch sai từ 'open-source' thành tên riêng như Owen, và không bịa"
+    " đặt bất kỳ thông tin sai lệch nào. Khi trình bày các công thức toán"
+    " học, tuyệt đối KHÔNG sử dụng các ký hiệu LaTeX phức tạp hay đóng khung"
+    " bằng dấu ngoặc vuông như \\[ \\], hãy viết rõ ràng, mạch lạc bằng văn bản"
+    " thông thường hoặc ký hiệu ký tự cơ bản. Phản hồi của bạn cần sắc sảo,"
+    " logic và trình bày rõ ràng."
 )
 
 for message in st.session_state.messages:
   with st.chat_message(message["role"]):
     st.markdown(message["content"])
 
-if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn..."):
+if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu cần tra cứu..."):
   st.session_state.messages.append({"role": "user", "content": prompt})
   with st.chat_message("user"):
     st.markdown(prompt)
@@ -137,7 +176,7 @@ if prompt := st.chat_input("Nhập câu hỏi hoặc yêu cầu của bạn...")
         role = "user" if m["role"] == "user" else "assistant"
         formatted_messages.append({"role": role, "content": m["content"]})
 
-      with st.spinner("DeepZero đang phản hồi cực tốc độ..."):
+      with st.spinner("DeepZero đang tra cứu internet và phân tích dữ liệu..."):
         answer = smart_generate_response(formatted_messages, system_inch)
 
       st.markdown(answer)
